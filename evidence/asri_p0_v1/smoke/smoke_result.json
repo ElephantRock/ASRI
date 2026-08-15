@@ -1,0 +1,14 @@
+{
+  "device": "cuda:0",
+  "dtype": "torch.bfloat16",
+  "elapsed_seconds": 0.785922999959439,
+  "input_tokens": 18,
+  "output_tokens": 2,
+  "peak_allocated_bytes": 8115154432,
+  "peak_reserved_bytes": 8128561152,
+  "prompt": "Return exactly the word READY.",
+  "rendered_prompt": "<|im_start|>user\nReturn exactly the word READY.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "response": "READY",
+  "think_tag_present": false,
+  "thinking_disabled": true
+}
