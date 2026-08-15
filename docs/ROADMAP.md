@@ -2,7 +2,8 @@
 
 ```text
 Document: staged research path
-Status: initial roadmap
+Status: active roadmap
+Current phase: ASRI-P0-v1 — substrate and baseline
 Rule: later phases are conditional, not promised implementation work
 ```
 
@@ -20,10 +21,21 @@ CLOSE — the hypothesis is not useful enough to remain on the critical path
 
 A phase may produce valuable negative evidence and still be complete.
 
-## 2. Phase 0 — Foundation and baseline
+## 2. Phase 0 — Substrate and baseline
+
+### Status
+
+```text
+ACTIVE
+contract: docs/phase0/ASRI-P0-v1.md
+primary substrate: Qwen/Qwen3-4B
+frozen model revision: 1cfa9a7208912126459214e8b04321603b3df60c
+```
 
 ### Objective
 Create the minimum apparatus required to make the first real-model comparison credible.
+
+The Qwen3 baseline runs with textual thinking disabled so the first ASRI experiment does not mix recurrent internal computation with variable generated chain-of-thought.
 
 ### Required outputs
 
@@ -32,16 +44,27 @@ frozen base-model identity and revision
 license/provenance record
 tokenizer and generation settings
 hardware/software environment manifest
-baseline evaluation corpus
-profile / held-out / cross-domain / OOD splits where applicable
+baseline evaluation corpus and deterministic item assignment
 baseline quality results
 baseline latency and memory results
 reproducible evaluation command
-result schema
+result schema and validator
+```
+
+### Initial evaluation surface
+
+```text
+MATH-500              structured mathematical reasoning
+HumanEval+             executable code correctness
+IFEval                 instruction-following protection
+MMLU-Pro bounded slice cross-domain capability control
 ```
 
 ### Exit gate
-The unchanged baseline must run reproducibly before recurrent modifications are interpreted.
+
+The phase closes `BASELINE_READY` only when the unchanged model runs reproducibly, scorer fixtures pass, synchronized repeated runtime measurements work, memory evidence is captured, and the evidence manifests can be reproduced.
+
+No recurrent result may be interpreted before this gate.
 
 ---
 
@@ -310,9 +333,12 @@ The long-term comparison target is not “win every benchmark.” It is:
 ## 13. Current critical path
 
 ```text
-1. Freeze baseline substrate and evaluation contract.
-2. Implement Recurrent Depth Frontier v1.
-3. Run the real-model fixed-depth sweep.
-4. Decide PROMOTE / REFINE / CLOSE from measured evidence.
-5. Only if promoted, build Adaptive Depth v1.
+1. Execute ASRI-P0-v1 on the frozen Qwen3-4B substrate.
+2. Capture model/environment/dataset/generation manifests.
+3. Run scorer fixture checks and the unchanged baseline.
+4. Close Phase 0 BASELINE_READY / REFINE / REJECTED / INVALID.
+5. If BASELINE_READY, freeze RDF-v1 numerical gates before held-out recurrent results.
+6. Implement and run the Recurrent Depth Frontier.
+7. Decide PROMOTE / REFINE / CLOSE from measured evidence.
+8. Only if promoted, build Adaptive Depth v1.
 ```
