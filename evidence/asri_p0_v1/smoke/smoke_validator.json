@@ -1,0 +1,9 @@
+{
+  "expected_response_match": true,
+  "generation_nonempty": true,
+  "model_id_match": true,
+  "model_revision_match": true,
+  "think_tag_absent": true,
+  "thinking_disabled": true,
+  "verdict": "PASS"
+}
