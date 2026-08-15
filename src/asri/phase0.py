@@ -11,7 +11,6 @@ import importlib.metadata
 import json
 import os
 import platform
-import socket
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -25,6 +24,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_ID = "Qwen/Qwen3-4B"
 MODEL_REVISION = "1cfa9a7208912126459214e8b04321603b3df60c"
+EXPECTED_SMOKE_RESPONSE = "READY"
+
+# Environment variables whose presence (never value) is recorded in evidence,
+# so machine-local cache locations stay out of public artifacts.
+_TRACKED_ENV_VARIABLES = (
+    "CUDA_VISIBLE_DEVICES",
+    "HF_HOME",
+    "TRANSFORMERS_CACHE",
+    "TORCH_HOME",
+)
 
 
 def _version(distribution: str) -> str | None:
@@ -63,10 +72,8 @@ def _cuda_device_manifest() -> list[dict[str, Any]]:
 def environment_manifest() -> dict[str, Any]:
     vm = psutil.virtual_memory()
     return {
-        "hostname": socket.gethostname(),
         "platform": platform.platform(),
         "python": sys.version,
-        "python_executable": sys.executable,
         "cpu": platform.processor(),
         "logical_cpu_count": psutil.cpu_count(logical=True),
         "physical_cpu_count": psutil.cpu_count(logical=False),
@@ -78,15 +85,9 @@ def environment_manifest() -> dict[str, Any]:
         "cudnn": torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None,
         "cuda_available": torch.cuda.is_available(),
         "cuda_devices": _cuda_device_manifest(),
-        "environment": {
-            key: os.environ.get(key)
-            for key in (
-                "CUDA_VISIBLE_DEVICES",
-                "HF_HOME",
-                "TRANSFORMERS_CACHE",
-                "TORCH_HOME",
-            )
-            if os.environ.get(key) is not None
+        "environment_variables_set": {
+            key: os.environ.get(key) is not None
+            for key in _TRACKED_ENV_VARIABLES
         },
     }
 
@@ -99,6 +100,22 @@ def freeze_model_snapshot(cache_dir: str | None = None) -> Path:
         cache_dir=cache_dir,
     )
     return Path(snapshot)
+
+
+def resolved_revision_from_snapshot(snapshot: Path) -> str:
+    """Extract the resolved revision recorded in the HF snapshot layout.
+
+    snapshot_download() returns ``.../snapshots/<resolved-revision>``; the
+    component after the ``snapshots`` directory is the immutable commit the
+    download actually resolved to, independent of the requested pin.
+    """
+    parts = snapshot.resolve().parts
+    for index, part in enumerate(parts):
+        if part == "snapshots" and index + 1 < len(parts):
+            revision = parts[index + 1]
+            if len(revision) == 40 and all(c in "0123456789abcdef" for c in revision.lower()):
+                return revision
+    raise ValueError(f"cannot extract resolved revision from snapshot path: {snapshot}")
 
 
 def model_manifest(snapshot: Path) -> dict[str, Any]:
@@ -130,7 +147,7 @@ def model_manifest(snapshot: Path) -> dict[str, Any]:
     return {
         "model_id": MODEL_ID,
         "model_revision": MODEL_REVISION,
-        "snapshot_path": str(snapshot),
+        "resolved_revision": resolved_revision_from_snapshot(snapshot),
         "control_file_sha256": hashes,
         "weight_shards": shards,
     }
@@ -239,6 +256,20 @@ def run_smoke(
     )
 
 
+def smoke_validator_checks(result: SmokeResult, resolved_revision: str) -> dict[str, Any]:
+    """Independently re-check the frozen-substrate contract on a smoke result."""
+    checks = {
+        "model_id_match": MODEL_ID == "Qwen/Qwen3-4B",
+        "model_revision_match": resolved_revision == MODEL_REVISION,
+        "thinking_disabled": result.thinking_disabled,
+        "think_tag_absent": not result.think_tag_present,
+        "generation_nonempty": result.output_tokens > 0,
+        "expected_response_match": result.response == EXPECTED_SMOKE_RESPONSE,
+    }
+    checks["verdict"] = "PASS" if all(value is True for value in checks.values()) else "FAIL"
+    return checks
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -251,21 +282,11 @@ def write_phase0_smoke_evidence(
     snapshot: Path,
     result: SmokeResult,
 ) -> None:
+    resolved_revision = resolved_revision_from_snapshot(snapshot)
     write_json(output_dir / "environment.json", environment_manifest())
     write_json(output_dir / "model_manifest.json", model_manifest(snapshot))
     write_json(output_dir / "smoke_result.json", asdict(result))
     write_json(
         output_dir / "smoke_validator.json",
-        {
-            "model_id_match": MODEL_ID == "Qwen/Qwen3-4B",
-            "model_revision_match": len(MODEL_REVISION) == 40,
-            "thinking_disabled": result.thinking_disabled,
-            "think_tag_absent": not result.think_tag_present,
-            "generation_nonempty": result.output_tokens > 0,
-            "verdict": "PASS"
-            if result.thinking_disabled
-            and not result.think_tag_present
-            and result.output_tokens > 0
-            else "FAIL",
-        },
+        smoke_validator_checks(result, resolved_revision),
     )

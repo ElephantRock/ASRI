@@ -14,7 +14,9 @@ from pathlib import Path
 from asri.phase0 import (
     freeze_model_snapshot,
     load_frozen_model,
+    resolved_revision_from_snapshot,
     run_smoke,
+    smoke_validator_checks,
     write_phase0_smoke_evidence,
 )
 
@@ -47,13 +49,16 @@ def main() -> int:
     result = run_smoke(tokenizer, model, device, prompt=args.prompt)
     write_phase0_smoke_evidence(args.output_dir, snapshot, result)
 
-    verdict = "FAIL" if result.think_tag_present or result.output_tokens == 0 else "PASS"
+    checks = smoke_validator_checks(result, resolved_revision_from_snapshot(snapshot))
+    verdict = checks["verdict"]
     print(f"ASRI-P0 smoke: {verdict}")
     print(f"device={result.device} dtype={result.dtype}")
     print(f"latency_s={result.elapsed_seconds:.6f}")
     print(f"input_tokens={result.input_tokens} output_tokens={result.output_tokens}")
     print(f"response={result.response!r}")
     print(f"evidence={args.output_dir}")
+    if verdict != "PASS":
+        print(f"failed_checks={sorted(k for k, v in checks.items() if v is False)}")
     return 0 if verdict == "PASS" else 1
 
 
