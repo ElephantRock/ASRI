@@ -40,3 +40,27 @@ download stalled while `uv` completed, which is why `uv` is shown.)
 
 Note: no `cu128` wheel of torch 2.13.0 exists for Windows; `cu130` is the
 variant that matched both the available wheels and the installed driver.
+
+## Windows: evalplus execution compatibility
+
+evalplus 0.3.x code execution relies on two Unix-only facilities: the
+`resource` module (RLIMIT memory caps in `reliability_guard`) and
+`signal.setitimer`/`SIGALRM` (per-test timeouts). Neither exists on Windows,
+which makes every HumanEval+ candidate report as failed — including canonical
+solutions.
+
+`src/asri/_windows_evalplus_compat.py` provides stdlib-only shims (no-op
+RLIMIT stub; thread-based alarm emulation raising an async exception in the
+main thread). Because evalplus executes candidates in spawned child
+processes, the shim must load in **every** interpreter of the virtual
+environment. Register it once per venv:
+
+```bash
+echo "import asri._windows_evalplus_compat  # noqa: F401" \
+  > .venv/Lib/site-packages/zz_asri_windows_compat.pth
+```
+
+The parent-level per-task wall-clock timeout in `untrusted_check` remains the
+hard backstop for C-level hangs that the async alarm cannot interrupt.
+Scorer fixtures (canonical passes / redefined-broken fails) verify the
+execution path end to end.
