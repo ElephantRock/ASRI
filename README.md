@@ -35,9 +35,13 @@ The project treats reasoning steps, specialist activation, memory access, retrie
 
 ## Current phase
 
-**Phase 1: Recurrent Depth Frontier**
+**Phase 0: Substrate and Baseline**
 
-The first program isolates recurrent reasoning from every other major ASRI idea. It compares an unchanged pretrained baseline against weight-shared recurrent depth at fixed iteration counts, then—only if the frontier is promising—tests adaptive stopping at matched average compute.
+The first executable program freezes the exact pretrained substrate, evaluation surface, hardware/software environment, generation policy, scorers, and unchanged baseline before any recurrent architectural result is interpreted.
+
+The selected primary substrate is `Qwen/Qwen3-4B` at revision `1cfa9a7208912126459214e8b04321603b3df60c`, evaluated with Qwen3 textual thinking disabled so recurrent depth is not confounded with variable chain-of-thought generation.
+
+Once Phase 0 closes `BASELINE_READY`, the authorized architectural experiment is **ASRI Recurrent Depth Frontier v1**. It compares the unchanged baseline against weight-shared recurrent depth at fixed iteration counts, then—only if the frontier is promising—authorizes adaptive-depth research.
 
 No sparse expert bank, retrieval system, persistent memory, verifier, tool controller, expert offloading, or attention surgery is required to establish the first result.
 
@@ -46,6 +50,7 @@ No sparse expert bank, retrieval system, persistent memory, verifier, tool contr
 - [`docs/FOUNDATION.md`](docs/FOUNDATION.md) — research thesis, boundaries, and north-star architecture.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — staged research path and promotion gates.
 - [`docs/EVIDENCE_DOCTRINE.md`](docs/EVIDENCE_DOCTRINE.md) — measurement, claims, readiness, and anti-overclaim rules.
+- [`docs/phase0/ASRI-P0-v1.md`](docs/phase0/ASRI-P0-v1.md) — substrate selection and unchanged-baseline execution contract.
 - [`docs/experiments/ASRI-RDF-v1.md`](docs/experiments/ASRI-RDF-v1.md) — frozen outline for the first recurrent-depth experiment.
 
 ## Relationship to ExpertOS
