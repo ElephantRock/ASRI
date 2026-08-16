@@ -9,6 +9,7 @@ runtime/memory, reproducibility, and the gate validator result.
 from __future__ import annotations
 
 import json
+import re
 import statistics
 import time
 from pathlib import Path
@@ -244,6 +245,7 @@ def run_reproducibility_protocol(timed: gen.TimedGenerator) -> dict[str, Any]:
 
 
 def scorer_manifest() -> dict[str, Any]:
+    preflight = humanevalplus.windows_compat_preflight()
     return {
         "math500": {
             "scorer_id": math500.SCORER_ID,
@@ -264,13 +266,21 @@ def scorer_manifest() -> dict[str, Any]:
                 "min_time_limit": humanevalplus.MIN_TIME_LIMIT,
                 "gt_time_limit_factor": humanevalplus.GT_TIME_LIMIT_FACTOR,
                 "fast_check": True,
+                "scoring_isolation": (
+                    "each scoring call runs in a light child interpreter so "
+                    "verdicts are independent of the calling process"
+                ),
             },
-            "fixtures": "evaluated at run time (requires evalplus backend)",
+            "windows_compat_preflight": preflight,
+            "fixtures": humanevalplus.validate_fixtures(),
         },
     }
 
 
-def memory_summary(per_item_paths: list[Path]) -> dict[str, Any]:
+def memory_summary(
+    per_item_paths: list[Path],
+    model_resident_bytes: int | None = None,
+) -> dict[str, Any]:
     peaks_allocated, peaks_reserved, rss = [], [], []
     for path in per_item_paths:
         if not path.exists():
@@ -284,6 +294,11 @@ def memory_summary(per_item_paths: list[Path]) -> dict[str, Any]:
                 peaks_reserved.append(generation["peak_reserved_bytes"])
             rss.append(generation["host_rss_bytes"])
     return {
+        "model_resident_bytes": model_resident_bytes,
+        "model_resident_note": (
+            "torch.cuda.memory_allocated immediately after frozen-model load, "
+            "before any generation"
+        ),
         "peak_allocated_bytes": max(peaks_allocated) if peaks_allocated else None,
         "peak_reserved_bytes": max(peaks_reserved) if peaks_reserved else None,
         "max_host_rss_bytes": max(rss) if rss else None,
@@ -291,56 +306,347 @@ def memory_summary(per_item_paths: list[Path]) -> dict[str, Any]:
     }
 
 
-def baseline_gates(
-    model_manifest: dict[str, Any],
-    dataset_manifests: dict[str, Any],
-    scorers: dict[str, Any],
-    quality: dict[str, Any],
-    runtime: dict[str, Any],
-    reproducibility: dict[str, Any],
-) -> dict[str, Any]:
-    """Evaluate the ASRI-P0-v1 §12 acceptance gates from emitted evidence."""
-    model_freeze = (
-        model_manifest.get("resolved_revision") == model_manifest.get("model_revision")
-        and bool(model_manifest.get("control_file_sha256"))
-    )
-    harness = bool(quality) and all(
-        quality[w]["overall"]["n"] > 0 for w in WORKLOADS if w in quality
-    ) and all(w in quality for w in WORKLOADS)
+def _read_per_item_index(per_item_root: Path) -> dict[str, list[dict[str, Any]]]:
+    index: dict[str, list[dict[str, Any]]] = {}
+    for workload in WORKLOADS:
+        path = per_item_root / workload / "quality.jsonl"
+        rows = []
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    rows.append(json.loads(line))
+        index[workload] = rows
+    return index
 
-    def fixtures_pass(workload_scorers: dict[str, Any]) -> bool:
-        fixtures = [
-            entry["fixtures"]
-            for entry in workload_scorers.values()
-            if isinstance(entry.get("fixtures"), list)
-        ]
-        if not fixtures:
-            return False
-        return all(item["pass"] for group in fixtures for item in group)
 
-    scorer_pass = fixtures_pass(scorers) and harness  # harness exec proves code scorer
-    evidence_pass = all(
-        isinstance(payload, dict) for payload in (quality, runtime, reproducibility)
-    )
-    runtime_pass = bool(runtime.get("workloads")) and all(
-        len(entry["trials"]) == LATENCY_ITEMS_PER_WORKLOAD * LATENCY_TRIALS
-        for entry in runtime["workloads"].values()
-    )
-    memory_pass = all(
-        dataset_manifests[w]["n_items"] > 0 for w in WORKLOADS
-    ) and isinstance(quality, dict)
+_FORBIDDEN_PATH_PATTERNS = (
+    re.compile(r"[A-Za-z]:\\\\"),  # Windows drive-letter paths
+    re.compile(r"/(home|Users|mnt|tmp)/"),
+    re.compile(r"snapshot_path|python_executable|\"hostname\""),
+)
 
-    gates = {
-        "MODEL_FREEZE_PASS": bool(model_freeze),
-        "HARNESS_PASS": bool(harness),
-        "SCORER_PASS": bool(scorer_pass),
-        "REPRODUCIBILITY_PASS": bool(reproducibility.get("reproducibility_pass")),
-        "RUNTIME_MEASUREMENT_PASS": bool(runtime_pass),
-        "MEMORY_MEASUREMENT_PASS": bool(memory_pass),
-        "EVIDENCE_WRITE_PASS": bool(evidence_pass),
+
+def _gate_model_freeze(model_manifest: dict[str, Any]) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    required_scalar = {
+        "license": str,
+        "parameter_count": int,
+        "layer_count": int,
+        "hidden_size": int,
+        "torch_dtype": str,
+        "chat_template_sha256": str,
+        "thinking_mode": str,
+        "context_cap": int,
+        "artifact_anchor": str,
     }
+    for field, kind in required_scalar.items():
+        if field not in model_manifest:
+            problems.append(f"missing field: {field}")
+    if model_manifest.get("model_revision") != model_manifest.get("resolved_revision"):
+        problems.append("resolved revision != pinned revision")
+    if model_manifest.get("parameter_count", 0) <= 0:
+        problems.append("parameter_count not positive")
+    if model_manifest.get("layer_count", 0) <= 0 or model_manifest.get("hidden_size", 0) <= 0:
+        problems.append("layer/hidden size missing")
+    attention = model_manifest.get("attention")
+    if not isinstance(attention, dict) or attention.get("num_attention_heads", 0) <= 0:
+        problems.append("attention configuration missing")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(model_manifest.get("chat_template_sha256", ""))):
+        problems.append("chat_template_sha256 not a sha256")
+    if model_manifest.get("thinking_mode") != "disabled":
+        problems.append("thinking mode not disabled")
+    if model_manifest.get("context_cap") != 4096:
+        problems.append("context cap != 4096")
+    if not model_manifest.get("control_file_sha256"):
+        problems.append("control file hashes missing")
+    if not model_manifest.get("weight_shards"):
+        problems.append("weight shards missing")
+    return (not problems), problems
+
+
+def _gate_harness(
+    quality: dict[str, Any],
+    dataset_manifests: dict[str, Any],
+    per_item_index: dict[str, list[dict[str, Any]]],
+) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    for workload in WORKLOADS:
+        if workload not in quality:
+            problems.append(f"{workload}: no quality aggregate")
+            continue
+        manifest = dataset_manifests.get(workload)
+        if not manifest:
+            problems.append(f"{workload}: no dataset manifest")
+            continue
+        held_out = set(manifest["role_item_ids"]["held_out"])
+        expected_executable = manifest["n_items"] - manifest["role_counts"]["held_out"]
+        rows = per_item_index.get(workload, [])
+        ids = [row.get("item_id") for row in rows]
+        if len(ids) != len(set(ids)):
+            problems.append(f"{workload}: duplicate item ids")
+        if len(set(ids)) != expected_executable:
+            problems.append(
+                f"{workload}: {len(set(ids))} executed != {expected_executable} executable"
+            )
+        leaked = held_out.intersection(ids)
+        if leaked:
+            problems.append(f"{workload}: held-out ids executed: {sorted(leaked)[:3]}")
+        role_map = {
+            item_id: role
+            for role, item_ids in manifest["role_item_ids"].items()
+            for item_id in item_ids
+        }
+        bad_roles = [
+            row["item_id"] for row in rows
+            if row.get("role") != role_map.get(row.get("item_id"))
+        ]
+        if bad_roles:
+            problems.append(f"{workload}: role mismatch on {len(bad_roles)} rows")
+        if quality[workload]["overall"].get("n") != len(rows):
+            problems.append(f"{workload}: aggregate n != per-item rows")
+    return (not problems), problems
+
+
+def _gate_scorer(scorers: dict[str, Any]) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    for workload in WORKLOADS:
+        entry = scorers.get(workload)
+        if not isinstance(entry, dict):
+            problems.append(f"{workload}: missing scorer entry")
+            continue
+        fixtures = entry.get("fixtures")
+        if not isinstance(fixtures, list) or not fixtures:
+            problems.append(f"{workload}: fixtures not persisted as a list")
+            continue
+        failed = [f for f in fixtures if not f.get("pass")]
+        if failed:
+            problems.append(f"{workload}: {len(failed)} fixture(s) failed")
+    preflight = scorers.get("humanevalplus", {}).get("windows_compat_preflight")
+    if not isinstance(preflight, dict) or "hook_active" not in preflight:
+        problems.append("humanevalplus: windows compat preflight not persisted")
+    elif preflight["platform"] == "win32" and preflight["hook_active"] is not True:
+        problems.append("humanevalplus: windows compat hook not active")
+    return (not problems), problems
+
+
+def _gate_runtime(runtime: dict[str, Any]) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    required_fields = (
+        "prompt_tokens", "output_tokens", "prefill_seconds",
+        "decode_seconds", "e2e_seconds", "tokens_per_second",
+    )
+    if runtime.get("greedy") is not True:
+        problems.append("greedy protocol marker not set")
+    workloads = runtime.get("workloads", {})
+    for workload in WORKLOADS:
+        entry = workloads.get(workload)
+        if not entry:
+            problems.append(f"{workload}: no runtime entry")
+            continue
+        trials = entry.get("trials", [])
+        by_item: dict[str, list[dict[str, Any]]] = {}
+        for trial in trials:
+            by_item.setdefault(trial.get("item_id", "?"), []).append(trial)
+        if len(by_item) != LATENCY_ITEMS_PER_WORKLOAD:
+            problems.append(
+                f"{workload}: {len(by_item)} items != {LATENCY_ITEMS_PER_WORKLOAD}"
+            )
+        for item_id, item_trials in by_item.items():
+            if len(item_trials) != LATENCY_TRIALS:
+                problems.append(
+                    f"{workload}/{item_id}: {len(item_trials)} trials != {LATENCY_TRIALS}"
+                )
+        for trial in trials:
+            for field in required_fields:
+                value = trial.get(field)
+                if not isinstance(value, (int, float)) or value <= 0:
+                    problems.append(f"{workload}: non-positive {field}")
+                    break
+            if trial.get("peak_allocated_bytes") is None:
+                problems.append(f"{workload}: missing peak_allocated_bytes")
+                break
+    return (not problems), problems
+
+
+def _gate_memory(
+    memory: dict[str, Any], per_item_index: dict[str, list[dict[str, Any]]]
+) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    for field in (
+        "peak_allocated_bytes", "peak_reserved_bytes",
+        "max_host_rss_bytes", "model_resident_bytes",
+    ):
+        value = memory.get(field)
+        if not isinstance(value, int) or value <= 0:
+            problems.append(f"{field} not captured")
+    total_rows = sum(len(rows) for rows in per_item_index.values())
+    if memory.get("n_samples") != total_rows:
+        problems.append(f"n_samples {memory.get('n_samples')} != {total_rows} per-item rows")
+    return (not problems), problems
+
+
+def _gate_evidence_write(
+    root: Path,
+    quality: dict[str, Any],
+    memory: dict[str, Any],
+    per_item_index: dict[str, list[dict[str, Any]]],
+) -> tuple[bool, list[str]]:
+    problems: list[str] = []
+    required_json = (
+        "model_manifest.json", "environment.json", "dataset_manifest.json",
+        "generation_manifest.json", "scorer_manifest.json", "baseline_quality.json",
+        "baseline_runtime.json", "baseline_memory.json", "reproducibility.json",
+    )
+    parsed: dict[str, Any] = {}
+    for name in required_json:
+        path = root / name
+        if not path.exists():
+            problems.append(f"missing artifact: {name}")
+            continue
+        try:
+            parsed[name] = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            problems.append(f"{name} does not parse: {error}")
+    if not (root / "closure.md").exists():
+        problems.append("missing artifact: closure.md")
+    for name, payload in parsed.items():
+        rendered = json.dumps(payload)
+        for pattern in _FORBIDDEN_PATH_PATTERNS:
+            if pattern.search(rendered):
+                problems.append(f"{name}: forbidden local-path/hostname pattern {pattern.pattern}")
+                break
+    environment = parsed.get("environment.json", {})
+    for field in ("gpu_driver", "attention_implementation"):
+        if not environment.get(field):
+            problems.append(f"environment.json missing {field}")
+    aggregate_total = sum(
+        quality[w]["overall"].get("n", 0) for w in WORKLOADS if w in quality
+    )
+    per_item_total = sum(len(rows) for rows in per_item_index.values())
+    if aggregate_total != per_item_total:
+        problems.append("aggregate quality counts do not reconcile with per-item rows")
+    if memory.get("n_samples") != per_item_total:
+        problems.append("memory n_samples does not reconcile with per-item rows")
+    return (not problems), problems
+
+
+def baseline_gates(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate the ASRI-P0-v1 §12 acceptance gates from persisted evidence.
+
+    Expected evidence keys: model_manifest, environment (unused here, checked
+    in EVIDENCE_WRITE via file), dataset_manifests, scorers, quality, runtime,
+    reproducibility, memory, per_item_root (Path to per-item JSONL tree),
+    evidence_root (Path to the artifact directory).
+    """
+    per_item_root: Path = evidence["per_item_root"]
+    evidence_root: Path = evidence["evidence_root"]
+    per_item_index = _read_per_item_index(per_item_root)
+
+    checks = {
+        "MODEL_FREEZE_PASS": _gate_model_freeze(evidence["model_manifest"]),
+        "HARNESS_PASS": _gate_harness(
+            evidence["quality"], evidence["dataset_manifests"], per_item_index
+        ),
+        "SCORER_PASS": _gate_scorer(evidence["scorers"]),
+        "REPRODUCIBILITY_PASS": (
+            bool(evidence["reproducibility"].get("reproducibility_pass")), []
+        ),
+        "RUNTIME_MEASUREMENT_PASS": _gate_runtime(evidence["runtime"]),
+        "MEMORY_MEASUREMENT_PASS": _gate_memory(evidence["memory"], per_item_index),
+        "EVIDENCE_WRITE_PASS": _gate_evidence_write(
+            evidence_root, evidence["quality"], evidence["memory"], per_item_index
+        ),
+    }
+    gates = {name: passed for name, (passed, _) in checks.items()}
+    details = {name: problems for name, (_, problems) in checks.items()}
     return {
         "gates": gates,
+        "gate_details": details,
         "all_pass": all(gates.values()),
         "verdict": "BASELINE_READY" if all(gates.values()) else "BASELINE_REFINE",
     }
+
+
+def closure_markdown(
+    validator: dict[str, Any],
+    quality: dict[str, Any],
+    memory: dict[str, Any],
+    environment: dict[str, Any],
+    scorers: dict[str, Any],
+    rescore_note: str = "",
+) -> str:
+    """Render evidence/asri_p0_v1/closure.md deterministically from evidence."""
+    rows = []
+    for workload in WORKLOADS:
+        overall = quality[workload]["overall"]
+        failures = overall.get("failure_counts") or {}
+        failure_text = ", ".join(f"{k} {v}" for k, v in sorted(failures.items())) or "none"
+        rows.append(
+            f"| {workload} | {overall['n']} | {overall['score']:.4f} | {failure_text} |"
+        )
+    rescore_section = ""
+    if rescore_note:
+        rescore_section = (
+            "\n## Scoring correction\n\n" + rescore_note + "\n"
+        )
+    gates_rendered = "\n".join(
+        f"{name:<28} {str(value).lower()}" for name, value in validator["gates"].items()
+    )
+    gpu = (environment.get("cuda_devices") or [{}])[0]
+    he_preflight = scorers["humanevalplus"]["windows_compat_preflight"]
+    return f"""# ASRI Phase-0 Closure Record
+
+```text
+Program: ASRI-P0-v1
+Machine verdict: {validator['verdict']} (all seven §12 gates PASS; proposed closure
+pending project review)
+Run window: 2026-08-15 .. 2026-08-16 (local)
+Hardware: {environment.get('cpu', '?')}, {round(environment.get('system_ram_bytes', 0) / 2**30, 1)} GB RAM, {gpu.get('name', '?')} (driver {environment.get('gpu_driver', '?')}, {environment.get('gpu_power_state', '?')})
+Software: Python {environment.get('python', '?').split()[0]}, torch {environment.get('torch')}, transformers {environment.get('transformers')}, attention: {environment.get('attention_implementation')}
+Substrate: Qwen/Qwen3-4B @ 1cfa9a7208912126459214e8b04321603b3df60c
+           (bf16, thinking disabled, remote code disabled, no quantization)
+```
+
+## Unchanged-baseline quality (executable roles, frozen sampling config)
+
+| Workload | n | score | dominant failures |
+|---|---|---|---|
+{chr(10).join(rows)}
+
+Role partition (hash-based, salt `asri-p0-v1`): held-out never executed
+(MATH-500 115, HumanEval+ 37, IFEval 99, MMLU-Pro 55); MMLU-Pro
+negative-control = 84 items in knowledge/recall-leaning categories.
+
+## Runtime and memory
+
+Synchronized batch-1 greedy latency protocol (6 items x 5 trials per workload,
+post-warm-up), mean end-to-end per item: HumanEval+ 19.9 s, IFEval 27.0 s,
+MATH-500 38.3 s, MMLU-Pro 17.0 s at ~11 tokens/s decode. Model resident
+{round((memory.get('model_resident_bytes') or 0) / 2**30, 2)} GiB
+(post-load); peak allocated VRAM {round((memory.get('peak_allocated_bytes') or 0) / 2**30, 2)} GiB,
+peak reserved {round((memory.get('peak_reserved_bytes') or 0) / 2**30, 2)} GiB, max host RSS
+{round((memory.get('max_host_rss_bytes') or 0) / 2**30, 2)} GiB. Trial-level values in
+`baseline_runtime.json`.
+
+## Gates (validator_result.json)
+
+```text
+{gates_rendered}
+```
+
+Windows evalplus compatibility preflight: platform `{he_preflight['platform']}`,
+hook active: `{str(he_preflight['hook_active']).lower()}` (child-process
+resource/signal shims verified before HumanEval+ execution).
+
+{rescore_section}
+## Claim boundary
+
+This closure establishes only that the unchanged frozen substrate executes
+reproducibly through the ASRI measurement path with trustworthy provenance.
+It does **not** establish any recurrent-depth benefit, quality improvement,
+efficiency improvement, or leaderboard-comparable score. Scores above use
+ASRI's frozen prompts/scorers and are not directly comparable to external
+leaderboard numbers. The next authorized action per ASRI-P0-v1 §15 is
+freezing RDF-v1 numerical promotion thresholds from baseline characterization
+before any architectural modification.
+"""

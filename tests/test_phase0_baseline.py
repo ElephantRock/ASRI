@@ -124,68 +124,261 @@ class TestResume:
 
 
 class TestBaselineGates:
-    def _quality(self, n: int = 3) -> dict:
+    @staticmethod
+    def _model_manifest() -> dict:
         return {
-            w: {"overall": {"n": n, "score": 0.5}} for w in baseline.WORKLOADS
-        }
-
-    def test_all_gates_pass(self) -> None:
-        model_manifest = {
+            "model_id": "Qwen/Qwen3-4B",
             "model_revision": "r" * 40,
             "resolved_revision": "r" * 40,
+            "license": "Apache-2.0",
+            "thinking_mode": "disabled",
+            "context_cap": 4096,
+            "parameter_count": 4_000_000_000,
+            "parameter_count_estimated": False,
+            "layer_count": 36,
+            "hidden_size": 2560,
+            "attention": {"num_attention_heads": 32, "num_key_value_heads": 8},
+            "vocab_size": 151936,
+            "torch_dtype": "bfloat16",
+            "chat_template_sha256": "a" * 64,
+            "artifact_anchor": "immutable HF revision + control-file sha256 set",
             "control_file_sha256": {"config.json": "abc"},
+            "weight_shards": [{"name": "a.safetensors", "size_bytes": 1}],
         }
-        dataset_manifests = {w: {"n_items": 10} for w in baseline.WORKLOADS}
-        scorers = {
-            "math500": {"fixtures": [{"pass": True}]},
-            "mmlupro": {"fixtures": [{"pass": True}]},
-            "ifeval": {"fixtures": [{"pass": True}]},
-            "humanevalplus": {"fixtures": "evaluated at run time (requires evalplus backend)"},
+
+    @staticmethod
+    def _scorers(platform: str = "win32", hook_active: bool = True) -> dict:
+        fixtures = [{"pass": True}]
+        return {
+            "math500": {"fixtures": fixtures},
+            "mmlupro": {"fixtures": fixtures},
+            "ifeval": {"fixtures": fixtures},
+            "humanevalplus": {
+                "fixtures": [{"pass": True}],
+                "windows_compat_preflight": {
+                    "platform": platform,
+                    "hook_active": hook_active,
+                },
+            },
         }
-        runtime = {
-            "workloads": {
-                w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS
-            }
+
+    @classmethod
+    def _dataset_manifest(cls, ids: list, held_out: list) -> dict:
+        return {
+            "n_items": len(ids) + len(held_out),
+            "role_counts": {
+                "dev": len(ids), "held_out": len(held_out),
+                "negative_control": 0, "characterization": 0,
+            },
+            "role_item_ids": {
+                "dev": ids, "held_out": held_out,
+                "negative_control": [], "characterization": [],
+            },
         }
-        repro = {"reproducibility_pass": True}
-        gates = baseline.baseline_gates(
-            model_manifest, dataset_manifests, scorers, self._quality(), runtime, repro
+
+    @classmethod
+    def _runtime(cls) -> dict:
+        trials = []
+        for item in range(baseline.LATENCY_ITEMS_PER_WORKLOAD):
+            for _ in range(baseline.LATENCY_TRIALS):
+                trials.append(
+                    {
+                        "item_id": f"item-{item}",
+                        "prompt_tokens": 10, "output_tokens": 5,
+                        "prefill_seconds": 0.1, "decode_seconds": 0.5,
+                        "e2e_seconds": 0.6, "tokens_per_second": 8.3,
+                        "peak_allocated_bytes": 1, "peak_reserved_bytes": 1,
+                    }
+                )
+        return {
+            "greedy": True,
+            "workloads": {w: {"trials": trials} for w in baseline.WORKLOADS},
+        }
+
+    @classmethod
+    def _context(cls, tmp_path: Path) -> dict:
+        per_item_root = tmp_path / "per_item"
+        evidence_root = tmp_path / "evidence"
+        evidence_root.mkdir()
+        quality = {}
+        dataset_manifests = {}
+        n_rows = 0
+        for w in baseline.WORKLOADS:
+            ids = [f"{w}-a", f"{w}-b"]
+            held_out = [f"{w}-h"]
+            dataset_manifests[w] = cls._dataset_manifest(ids, held_out)
+            rows = [
+                {"item_id": i, "role": "dev", "generation": {"host_rss_bytes": 1,
+                 "peak_allocated_bytes": 1, "peak_reserved_bytes": 1},
+                 "verdict": {"correct": True}}
+                for i in ids
+            ]
+            path = per_item_root / w / "quality.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+            )
+            n_rows += len(rows)
+            quality[w] = {"overall": {"n": len(rows), "score": 0.5}}
+        for name in (
+            "model_manifest.json", "environment.json", "dataset_manifest.json",
+            "generation_manifest.json", "scorer_manifest.json", "baseline_quality.json",
+            "baseline_runtime.json", "baseline_memory.json", "reproducibility.json",
+        ):
+            (evidence_root / name).write_text("{}", encoding="utf-8")
+        (evidence_root / "closure.md").write_text("closure", encoding="utf-8")
+        (evidence_root / "environment.json").write_text(
+            json.dumps({"gpu_driver": "610.47", "attention_implementation": "sdpa"}),
+            encoding="utf-8",
         )
-        assert gates["all_pass"] is True
+        memory = {
+            "model_resident_bytes": 8_000_000_000,
+            "peak_allocated_bytes": 9_000_000_000,
+            "peak_reserved_bytes": 9_500_000_000,
+            "max_host_rss_bytes": 1_800_000_000,
+            "n_samples": n_rows,
+        }
+        return {
+            "model_manifest": cls._model_manifest(),
+            "dataset_manifests": dataset_manifests,
+            "scorers": cls._scorers(),
+            "quality": quality,
+            "runtime": cls._runtime(),
+            "reproducibility": {"reproducibility_pass": True},
+            "memory": memory,
+            "per_item_root": per_item_root,
+            "evidence_root": evidence_root,
+        }
+
+    def test_all_gates_pass(self, tmp_path: Path) -> None:
+        gates = baseline.baseline_gates(self._context(tmp_path))
+        assert gates["all_pass"] is True, gates["gate_details"]
         assert gates["verdict"] == "BASELINE_READY"
 
-    def test_revision_mismatch_fails_model_freeze(self) -> None:
-        model_manifest = {
-            "model_revision": "r" * 40,
-            "resolved_revision": "s" * 40,
-            "control_file_sha256": {"config.json": "abc"},
-        }
-        gates = baseline.baseline_gates(
-            model_manifest,
-            {w: {"n_items": 10} for w in baseline.WORKLOADS},
-            {"a": {"fixtures": [{"pass": True}]}},
-            self._quality(),
-            {"workloads": {w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS}},
-            {"reproducibility_pass": True},
-        )
+    def test_model_freeze_fails_on_missing_layer_count(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        del context["model_manifest"]["layer_count"]
+        gates = baseline.baseline_gates(context)
         assert gates["gates"]["MODEL_FREEZE_PASS"] is False
         assert gates["verdict"] == "BASELINE_REFINE"
 
-    def test_repro_failure_blocks_ready(self) -> None:
-        model_manifest = {
-            "model_revision": "r" * 40,
-            "resolved_revision": "r" * 40,
-            "control_file_sha256": {"config.json": "abc"},
-        }
-        gates = baseline.baseline_gates(
-            model_manifest,
-            {w: {"n_items": 10} for w in baseline.WORKLOADS},
-            {"a": {"fixtures": [{"pass": True}]}},
-            self._quality(),
-            {"workloads": {w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS}},
-            {"reproducibility_pass": False},
+    def test_model_freeze_fails_on_thinking_enabled(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["thinking_mode"] = "enabled"
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
+
+    def test_model_freeze_fails_on_revision_mismatch(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["resolved_revision"] = "s" * 40
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
+
+    def test_harness_fails_on_partial_run(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        path = context["per_item_root"] / "math500" / "quality.jsonl"
+        lines = path.read_text(encoding="utf-8").splitlines()
+        path.write_text(lines[0] + "\n", encoding="utf-8")
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["HARNESS_PASS"] is False
+
+    def test_harness_fails_on_held_out_execution(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        path = context["per_item_root"] / "ifeval" / "quality.jsonl"
+        row = {"item_id": "ifeval-h", "role": "held_out",
+               "generation": {"host_rss_bytes": 1}, "verdict": {"correct": True}}
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row) + "\n")
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["HARNESS_PASS"] is False
+
+    def test_scorer_fails_on_fixture_failure(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["scorers"]["math500"]["fixtures"] = [{"pass": False}]
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["SCORER_PASS"] is False
+
+    def test_scorer_fails_on_missing_humanevalplus_fixtures(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["scorers"]["humanevalplus"]["fixtures"] = "string placeholder"
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["SCORER_PASS"] is False
+
+    def test_scorer_fails_on_inactive_windows_hook(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["scorers"] = self._scorers(platform="win32", hook_active=False)
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["SCORER_PASS"] is False
+
+    def test_runtime_fails_on_wrong_trial_count(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        for entry in context["runtime"]["workloads"].values():
+            entry["trials"] = entry["trials"][:-1]
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["RUNTIME_MEASUREMENT_PASS"] is False
+
+    def test_runtime_fails_on_missing_greedy_marker(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["runtime"]["greedy"] = False
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["RUNTIME_MEASUREMENT_PASS"] is False
+
+    def test_runtime_fails_on_non_positive_timing(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["runtime"]["workloads"]["math500"]["trials"][0]["e2e_seconds"] = 0
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["RUNTIME_MEASUREMENT_PASS"] is False
+
+    def test_memory_fails_on_missing_model_resident(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["memory"]["model_resident_bytes"] = None
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MEMORY_MEASUREMENT_PASS"] is False
+
+    def test_memory_fails_on_sample_mismatch(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["memory"]["n_samples"] += 1
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MEMORY_MEASUREMENT_PASS"] is False
+
+    def test_evidence_write_fails_on_missing_artifact(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        (context["evidence_root"] / "baseline_runtime.json").unlink()
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["EVIDENCE_WRITE_PASS"] is False
+
+    def test_evidence_write_fails_on_local_path_leak(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        leaked = "C:" + "\\" + "\\" + "Users" + "\\" + "\\" + "someone"
+        (context["evidence_root"] / "environment.json").write_text(
+            json.dumps({"gpu_driver": "610.47", "note": leaked}),
+            encoding="utf-8",
         )
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["EVIDENCE_WRITE_PASS"] is False
+
+    def test_evidence_write_fails_on_missing_driver_field(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        (context["evidence_root"] / "environment.json").write_text(
+            json.dumps({"attention_implementation": "sdpa"}), encoding="utf-8"
+        )
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["EVIDENCE_WRITE_PASS"] is False
+
+    def test_reproducibility_failure_blocks_ready(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["reproducibility"]["reproducibility_pass"] = False
+        gates = baseline.baseline_gates(context)
         assert gates["verdict"] == "BASELINE_REFINE"
+
+
+class TestWindowsCompatPreflight:
+    def test_preflight_reports_hook_active_on_this_machine(self) -> None:
+        from asri.scorers import humanevalplus
+
+        preflight = humanevalplus.windows_compat_preflight()
+        assert preflight["hook_active"] is True, preflight
+        assert "resource" in preflight["checked"]
 
 
 class TestGenerationSeeds:

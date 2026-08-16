@@ -71,11 +71,27 @@ class TestResolvedRevision:
 
 
 class TestModelManifestPrivacy:
-    def test_has_resolved_revision_and_no_local_paths(self, tmp_path: Path) -> None:
+    @staticmethod
+    def _fake_snapshot(tmp_path: Path) -> Path:
         snapshot = snapshot_dir(tmp_path)
         snapshot.mkdir(parents=True)
-        (snapshot / "config.json").write_text("{}", encoding="utf-8")
+        (snapshot / "config.json").write_text(
+            '{"model_type": "qwen3", "num_hidden_layers": 36, "hidden_size": 2560,'
+            ' "num_attention_heads": 32, "num_key_value_heads": 8, "vocab_size": 151936,'
+            ' "torch_dtype": "bfloat16"}',
+            encoding="utf-8",
+        )
+        (snapshot / "tokenizer_config.json").write_text(
+            '{"chat_template": "<|im_start|>user"}', encoding="utf-8"
+        )
+        (snapshot / "model.safetensors.index.json").write_text(
+            '{"metadata": {"total_size": 8044992000}}', encoding="utf-8"
+        )
         (snapshot / "model-00001-of-00003.safetensors").write_bytes(b"0" * 16)
+        return snapshot
+
+    def test_has_resolved_revision_and_no_local_paths(self, tmp_path: Path) -> None:
+        snapshot = self._fake_snapshot(tmp_path)
 
         manifest = model_manifest(snapshot)
 
@@ -86,17 +102,16 @@ class TestModelManifestPrivacy:
         assert not re.search(r"[A-Za-z]:\\\\", rendered)
 
     def test_records_shards_and_control_hashes(self, tmp_path: Path) -> None:
-        snapshot = snapshot_dir(tmp_path)
-        snapshot.mkdir(parents=True)
-        (snapshot / "config.json").write_text("{}", encoding="utf-8")
-        (snapshot / "model-00001-of-00003.safetensors").write_bytes(b"0" * 16)
+        snapshot = self._fake_snapshot(tmp_path)
 
         manifest = model_manifest(snapshot)
 
         assert manifest["weight_shards"] == [
             {"name": "model-00001-of-00003.safetensors", "size_bytes": 16}
         ]
-        assert set(manifest["control_file_sha256"]) == {"config.json"}
+        assert set(manifest["control_file_sha256"]) == {
+            "config.json", "tokenizer_config.json", "model.safetensors.index.json"
+        }
 
 
 class TestEnvironmentManifestPrivacy:

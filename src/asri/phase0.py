@@ -26,6 +26,11 @@ MODEL_ID = "Qwen/Qwen3-4B"
 MODEL_REVISION = "1cfa9a7208912126459214e8b04321603b3df60c"
 EXPECTED_SMOKE_RESPONSE = "READY"
 
+# Frozen substrate metadata required by ASRI-P0-v1 §2/§4/§5.
+MODEL_LICENSE = "Apache-2.0"
+MODEL_THINKING_MODE = "disabled"
+MODEL_CONTEXT_CAP = 4096
+
 # Environment variables whose presence (never value) is recorded in evidence,
 # so machine-local cache locations stay out of public artifacts.
 _TRACKED_ENV_VARIABLES = (
@@ -69,9 +74,29 @@ def _cuda_device_manifest() -> list[dict[str, Any]]:
     return devices
 
 
-def environment_manifest() -> dict[str, Any]:
+def _nvidia_smi_query(fields: tuple[str, ...]) -> dict[str, Any] | None:
+    """Query nvidia-smi for driver/power state; None when unavailable."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={','.join(fields)}", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    values = [value.strip() for value in result.stdout.strip().splitlines()[0].split(",")]
+    return dict(zip(fields, values))
+
+
+def environment_manifest(runtime: dict[str, Any] | None = None) -> dict[str, Any]:
     vm = psutil.virtual_memory()
-    return {
+    gpu_query = _nvidia_smi_query(("driver_version", "pstate", "power.draw")) if torch.cuda.is_available() else None
+    manifest = {
         "platform": platform.platform(),
         "python": sys.version,
         "cpu": platform.processor(),
@@ -85,11 +110,16 @@ def environment_manifest() -> dict[str, Any]:
         "cudnn": torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None,
         "cuda_available": torch.cuda.is_available(),
         "cuda_devices": _cuda_device_manifest(),
+        "gpu_driver": (gpu_query or {}).get("driver_version", "unavailable"),
+        "gpu_power_state": (gpu_query or {}).get("pstate", "unavailable"),
+        "gpu_power_draw": (gpu_query or {}).get("power.draw", "unavailable"),
+        "attention_implementation": (runtime or {}).get("attention_implementation", "unavailable"),
         "environment_variables_set": {
             key: os.environ.get(key) is not None
             for key in _TRACKED_ENV_VARIABLES
         },
     }
+    return manifest
 
 
 def freeze_model_snapshot(cache_dir: str | None = None) -> Path:
@@ -118,13 +148,20 @@ def resolved_revision_from_snapshot(snapshot: Path) -> str:
     raise ValueError(f"cannot extract resolved revision from snapshot path: {snapshot}")
 
 
-def model_manifest(snapshot: Path) -> dict[str, Any]:
-    """Record model identity and lightweight local artifact integrity.
+def model_manifest(
+    snapshot: Path,
+    *,
+    tokenizer: Any = None,
+    model: Any = None,
+) -> dict[str, Any]:
+    """Record model identity, frozen substrate metadata, and artifact integrity.
 
     Full weight hashing is deliberately deferred because the immutable HF revision
     already anchors the payload and hashing ~8 GB on every smoke run adds needless
     apparatus cost. The manifest records weight shard names/sizes and hashes the
-    small control files that determine model/tokenizer behavior.
+    small control files that determine model/tokenizer behavior. Architecture and
+    runtime fields required by ASRI-P0-v1 §4 come from the model config (and,
+    when a loaded model is provided, exact parameter counts).
     """
     control_files = [
         "config.json",
@@ -144,10 +181,51 @@ def model_manifest(snapshot: Path) -> dict[str, Any]:
     for path in sorted(snapshot.glob("*.safetensors")):
         shards.append({"name": path.name, "size_bytes": path.stat().st_size})
 
+    from transformers import AutoConfig
+
+    config = AutoConfig.from_pretrained(snapshot, trust_remote_code=False)
+
+    if tokenizer is not None:
+        chat_template_sha256 = hashlib.sha256(
+            getattr(tokenizer, "chat_template", "").encode()
+        ).hexdigest()
+    else:
+        tokenizer_config = json.loads((snapshot / "tokenizer_config.json").read_text(encoding="utf-8"))
+        template = tokenizer_config.get("chat_template") or ""
+        chat_template_sha256 = hashlib.sha256(template.encode()).hexdigest()
+
+    if model is not None:
+        parameter_count = int(model.num_parameters())
+        parameter_count_estimated = False
+    else:
+        index = json.loads((snapshot / "model.safetensors.index.json").read_text(encoding="utf-8"))
+        dtype_bytes = {"BF16": 2, "FP16": 2, "FP32": 4, "F32": 4}.get(
+            str(getattr(config, "torch_dtype", "")).upper(), 2
+        )
+        parameter_count = int(index.get("metadata", {}).get("total_size", 0) // dtype_bytes)
+        parameter_count_estimated = True
+
     return {
         "model_id": MODEL_ID,
         "model_revision": MODEL_REVISION,
         "resolved_revision": resolved_revision_from_snapshot(snapshot),
+        "license": MODEL_LICENSE,
+        "thinking_mode": MODEL_THINKING_MODE,
+        "context_cap": MODEL_CONTEXT_CAP,
+        "parameter_count": parameter_count,
+        "parameter_count_estimated": parameter_count_estimated,
+        "layer_count": int(getattr(config, "num_hidden_layers", 0)),
+        "hidden_size": int(getattr(config, "hidden_size", 0)),
+        "attention": {
+            "num_attention_heads": int(getattr(config, "num_attention_heads", 0)),
+            "num_key_value_heads": int(getattr(config, "num_key_value_heads", 0)),
+            "head_dim": int(getattr(config, "head_dim", 0) or 0),
+            "rope_theta": getattr(config, "rope_theta", None),
+        },
+        "vocab_size": int(getattr(config, "vocab_size", 0)),
+        "torch_dtype": str(getattr(config, "torch_dtype", "unknown")),
+        "chat_template_sha256": chat_template_sha256,
+        "artifact_anchor": "immutable HF revision + control-file sha256 set",
         "control_file_sha256": hashes,
         "weight_shards": shards,
     }

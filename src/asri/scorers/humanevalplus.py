@@ -8,7 +8,9 @@ both pass for the single generated candidate.
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 import sys
 import types
 from typing import Any
@@ -20,6 +22,57 @@ MIN_TIME_LIMIT = 1.0
 GT_TIME_LIMIT_FACTOR = 4.0
 
 _CODE_BLOCK = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
+
+_CHILD_CHECK = (
+    "import resource, signal\n"
+    "assert hasattr(signal, 'setitimer') and hasattr(signal, 'SIGALRM')\n"
+    "print('ok')\n"
+)
+
+_PREFLIGHT_CACHE: dict[str, Any] | None = None
+
+
+def windows_compat_preflight() -> dict[str, Any]:
+    """Verify a fresh child interpreter can import the Unix-only facilities
+    evalplus needs (resource module, setitimer/SIGALRM). On Windows these only
+    exist when the ``zz_asri_windows_compat.pth`` hook is registered in the
+    venv; a fresh environment without it silently fails every execution."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _CHILD_CHECK],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        hook_active = result.returncode == 0 and result.stdout.strip() == "ok"
+        detail = result.stderr.strip()[:200] if result.returncode != 0 else None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        hook_active = False
+        detail = repr(error)[:200]
+    return {
+        "platform": sys.platform,
+        "hook_active": bool(hook_active),
+        "checked": ["resource", "signal.setitimer", "signal.SIGALRM"],
+        "failure_detail": detail,
+    }
+
+
+def ensure_windows_compat() -> dict[str, Any]:
+    """Run (once per process) and enforce the compat preflight."""
+    global _PREFLIGHT_CACHE
+    if _PREFLIGHT_CACHE is None:
+        _PREFLIGHT_CACHE = windows_compat_preflight()
+    if not _PREFLIGHT_CACHE["hook_active"]:
+        raise RuntimeError(
+            "HumanEval+ execution is not viable in this environment: evalplus "
+            "requires Unix-only resource/signal facilities in its child "
+            "processes and the Windows compatibility hook is not active. "
+            "Register it with:\n"
+            "  echo \"import asri._windows_evalplus_compat  # noqa: F401\" > "
+            ".venv/Lib/site-packages/zz_asri_windows_compat.pth\n"
+            "Without it every candidate silently reports as failed."
+        )
+    return _PREFLIGHT_CACHE
 
 
 def _install_windows_resource_shim() -> None:
@@ -51,9 +104,25 @@ def _backend() -> tuple[Any, Any, Any, str]:
     return problems, expected_output, dataset_hash, PASS
 
 
-def score_item(model_output: str, task_id: str) -> dict[str, Any]:
+_CHILD_MARKER = "ASRI_HE_RESULT:"
+_CHILD_ENV = "ASRI_HE_PLUS_CHILD"
+
+_CHILD_RUNNER = (
+    "import json, os, sys\n"
+    f"os.environ['{_CHILD_ENV}'] = '1'\n"
+    "payload = json.loads(sys.stdin.read())\n"
+    "from asri.scorers.humanevalplus import _score_direct\n"
+    "verdict = _score_direct(payload['output'], payload['task_id'])\n"
+    f"sys.stdout.write('{_CHILD_MARKER}' + json.dumps(verdict) + chr(10))\n"
+    "sys.stdout.flush()\n"
+)
+
+
+def _score_direct(model_output: str, task_id: str) -> dict[str, Any]:
+    """Score inside this (child) process using evalplus's own executor."""
     from evalplus.evaluate import check_correctness
 
+    ensure_windows_compat()
     _install_windows_resource_shim()
     problems, expected_output, dataset_hash, pass_token = _backend()
     if task_id not in problems:
@@ -86,6 +155,40 @@ def score_item(model_output: str, task_id: str) -> dict[str, Any]:
         ),
         "solution_chars": len(solution),
     }
+
+
+def score_item(model_output: str, task_id: str) -> dict[str, Any]:
+    """Score one candidate, isolated in a light child interpreter.
+
+    evalplus executes candidates in spawned grandchildren that re-import the
+    calling interpreter's site. When the caller is heavy (model loaded), that
+    import cost can exceed evalplus's outer per-task wall clock and mark
+    correct solutions failed. Every scoring call therefore runs in a minimal
+    ``python -c`` child whose grandchildren spawn quickly; results depend only
+    on (response text, task_id), never on the calling context. Note
+    ``EVALPLUS_TIMEOUT_PER_TASK`` cannot be used to widen the budget: evalplus
+    compares the env string against a float (upstream bug).
+    """
+    import os
+
+    ensure_windows_compat()
+    if os.environ.get(_CHILD_ENV) == "1":
+        return _score_direct(model_output, task_id)
+    payload = json.dumps({"output": model_output, "task_id": task_id})
+    result = subprocess.run(
+        [sys.executable, "-c", _CHILD_RUNNER],
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    for line in result.stdout.splitlines():
+        if line.startswith(_CHILD_MARKER):
+            return json.loads(line[len(_CHILD_MARKER):])
+    raise RuntimeError(
+        f"isolated HumanEval+ scoring failed: rc={result.returncode} "
+        f"stderr_tail={result.stderr[-400:]!r}"
+    )
 
 
 def known_good_solution(task_id: str) -> str:
