@@ -1,0 +1,41 @@
+{
+  "batching": 1,
+  "chat_template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+  "context_cap": 4096,
+  "dtype": "torch.bfloat16",
+  "flop_formula": "2 * non_embedding_parameters * (prompt_tokens + output_tokens)",
+  "global_seed": 20260815,
+  "kv_cache": true,
+  "non_embedding_parameters": 3633511936,
+  "prefill_decode_method": "prefill measured via dedicated synchronized forward pass; decode derived as e2e minus prefill",
+  "quality_configs": {
+    "humanevalplus": {
+      "max_new_tokens": 1024,
+      "temperature": 0.6,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "ifeval": {
+      "max_new_tokens": 640,
+      "temperature": 0.6,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "math500": {
+      "max_new_tokens": 768,
+      "temperature": 0.6,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "mmlupro": {
+      "max_new_tokens": 512,
+      "temperature": 0.6,
+      "top_k": 20,
+      "top_p": 0.95
+    }
+  },
+  "sampling_reference": "Qwen3 model card non-thinking recommended settings",
+  "secondary_diagnostic": "greedy (temperature 0) consistency control only",
+  "seed_mechanism": "per-item seed applied via torch.cuda.manual_seed immediately before each sampled call (transformers 5.x removed per-call generator argument)",
+  "total_parameters": 4022468096
+}
