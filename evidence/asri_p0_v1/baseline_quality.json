@@ -1,0 +1,200 @@
+{
+  "humanevalplus": {
+    "overall": {
+      "by_category": {},
+      "by_role": {
+        "characterization": {
+          "correct": 81,
+          "n": 111
+        },
+        "dev": {
+          "correct": 12,
+          "n": 16
+        }
+      },
+      "failure_counts": {
+        "base_fail": 26,
+        "plus_fail": 8
+      },
+      "mean_e2e_seconds": 17.3398240645637,
+      "mean_output_tokens": 191.1811023622047,
+      "median_output_tokens": 180,
+      "n": 127,
+      "n_correct": 93,
+      "score": 0.7322834645669292
+    },
+    "source": "evidence/asri_p0_v1/per_item/humanevalplus/quality.jsonl",
+    "workload": "humanevalplus"
+  },
+  "ifeval": {
+    "overall": {
+      "by_category": {},
+      "by_role": {
+        "characterization": {
+          "correct": 332,
+          "n": 430
+        },
+        "dev": {
+          "correct": 11,
+          "n": 12
+        }
+      },
+      "failure_counts": {
+        "instruction_violated": 99
+      },
+      "mean_e2e_seconds": 24.696949577600748,
+      "mean_output_tokens": 278.6561085972851,
+      "median_output_tokens": 224.5,
+      "n": 442,
+      "n_correct": 343,
+      "score": 0.7760180995475113
+    },
+    "source": "evidence/asri_p0_v1/per_item/ifeval/quality.jsonl",
+    "workload": "ifeval"
+  },
+  "math500": {
+    "overall": {
+      "by_category": {
+        "Algebra": {
+          "correct": 70,
+          "n": 94
+        },
+        "Counting & Probability": {
+          "correct": 24,
+          "n": 31
+        },
+        "Geometry": {
+          "correct": 16,
+          "n": 32
+        },
+        "Intermediate Algebra": {
+          "correct": 20,
+          "n": 71
+        },
+        "Number Theory": {
+          "correct": 37,
+          "n": 48
+        },
+        "Prealgebra": {
+          "correct": 51,
+          "n": 65
+        },
+        "Precalculus": {
+          "correct": 19,
+          "n": 44
+        }
+      },
+      "by_role": {
+        "characterization": {
+          "correct": 227,
+          "n": 369
+        },
+        "dev": {
+          "correct": 10,
+          "n": 16
+        }
+      },
+      "failure_counts": {
+        "mismatch": 17,
+        "no_boxed": 98,
+        "undecidable": 33
+      },
+      "mean_e2e_seconds": 43.26455050155826,
+      "mean_output_tokens": 472.04935064935063,
+      "median_output_tokens": 442,
+      "n": 385,
+      "n_correct": 237,
+      "score": 0.6155844155844156
+    },
+    "source": "evidence/asri_p0_v1/per_item/math500/quality.jsonl",
+    "workload": "math500"
+  },
+  "mmlupro": {
+    "overall": {
+      "by_category": {
+        "biology": {
+          "correct": 8,
+          "n": 10
+        },
+        "business": {
+          "correct": 9,
+          "n": 17
+        },
+        "chemistry": {
+          "correct": 12,
+          "n": 18
+        },
+        "computer science": {
+          "correct": 2,
+          "n": 3
+        },
+        "economics": {
+          "correct": 15,
+          "n": 19
+        },
+        "engineering": {
+          "correct": 6,
+          "n": 14
+        },
+        "health": {
+          "correct": 9,
+          "n": 12
+        },
+        "history": {
+          "correct": 1,
+          "n": 3
+        },
+        "law": {
+          "correct": 5,
+          "n": 16
+        },
+        "math": {
+          "correct": 8,
+          "n": 14
+        },
+        "other": {
+          "correct": 11,
+          "n": 15
+        },
+        "philosophy": {
+          "correct": 7,
+          "n": 11
+        },
+        "physics": {
+          "correct": 10,
+          "n": 22
+        },
+        "psychology": {
+          "correct": 3,
+          "n": 11
+        }
+      },
+      "by_role": {
+        "characterization": {
+          "correct": 49,
+          "n": 82
+        },
+        "dev": {
+          "correct": 9,
+          "n": 19
+        },
+        "negative_control": {
+          "correct": 48,
+          "n": 84
+        }
+      },
+      "failure_counts": {
+        "mismatch": 72,
+        "no_choice": 7
+      },
+      "mean_e2e_seconds": 18.290888009729443,
+      "mean_output_tokens": 201.71891891891892,
+      "median_output_tokens": 133,
+      "n": 185,
+      "n_correct": 106,
+      "score": 0.572972972972973
+    },
+    "source": "evidence/asri_p0_v1/per_item/mmlupro/quality.jsonl",
+    "workload": "mmlupro"
+  }
+}

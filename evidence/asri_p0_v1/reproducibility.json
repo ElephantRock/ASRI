@@ -1,0 +1,97 @@
+{
+  "reproducibility_pass": true,
+  "workloads": {
+    "humanevalplus": {
+      "items": [
+        {
+          "greedy_text_match": true,
+          "item_id": "humanevalplus-HumanEval__10",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "humanevalplus-HumanEval__101",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "humanevalplus-HumanEval__102",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        }
+      ],
+      "n_items": 3
+    },
+    "ifeval": {
+      "items": [
+        {
+          "greedy_text_match": true,
+          "item_id": "ifeval-1000",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "ifeval-1001",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "ifeval-1005",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        }
+      ],
+      "n_items": 3
+    },
+    "math500": {
+      "items": [
+        {
+          "greedy_text_match": true,
+          "item_id": "math500-test/algebra/1004.json",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "math500-test/algebra/1031.json",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "math500-test/algebra/1072.json",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        }
+      ],
+      "n_items": 3
+    },
+    "mmlupro": {
+      "items": [
+        {
+          "greedy_text_match": true,
+          "item_id": "mmlupro-test-10009",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "mmlupro-test-10086",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        },
+        {
+          "greedy_text_match": true,
+          "item_id": "mmlupro-test-10144",
+          "sampled_text_match": true,
+          "sampled_verdict_match": true
+        }
+      ],
+      "n_items": 3
+    }
+  }
+}

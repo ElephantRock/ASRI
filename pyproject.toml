@@ -19,6 +19,11 @@ dependencies = [
 eval = [
   "datasets>=3",
   "numpy>=1.26",
+  "evalplus>=0.3",
+  "absl-py>=1.4",
+  "langdetect>=1.0.9",
+  "immutabledict>=2",
+  "nltk>=3.8",
 ]
 dev = [
   "pytest>=8",

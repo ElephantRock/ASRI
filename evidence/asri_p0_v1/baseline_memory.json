@@ -1,0 +1,8 @@
+{
+  "max_host_rss_bytes": 1889607680,
+  "model_resident_bytes": 8101709824,
+  "model_resident_note": "torch.cuda.memory_allocated immediately after frozen-model load, before any generation",
+  "n_samples": 1139,
+  "peak_allocated_bytes": 8626592256,
+  "peak_reserved_bytes": 9613344768
+}

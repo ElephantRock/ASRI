@@ -1,0 +1,157 @@
+{
+  "humanevalplus": {
+    "execution_policy": {
+      "fast_check": true,
+      "gt_time_limit_factor": 4.0,
+      "min_time_limit": 1.0,
+      "scoring_isolation": "each scoring call runs in a light child interpreter so verdicts are independent of the calling process"
+    },
+    "fixtures": [
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 0,
+        "mode": "canonical",
+        "pass": true,
+        "task_id": "HumanEval/11"
+      },
+      {
+        "actual_correct": false,
+        "expected_correct": false,
+        "fixture": 1,
+        "mode": "broken",
+        "pass": true,
+        "task_id": "HumanEval/11"
+      }
+    ],
+    "scorer_id": "humanevalplus-evalplus-v1",
+    "windows_compat_preflight": {
+      "checked": [
+        "resource",
+        "signal.setitimer",
+        "signal.SIGALRM"
+      ],
+      "failure_detail": null,
+      "hook_active": true,
+      "platform": "win32"
+    }
+  },
+  "ifeval": {
+    "fixtures": [
+      {
+        "actual_strict": true,
+        "expected_strict": true,
+        "fixture": 0,
+        "pass": true
+      },
+      {
+        "actual_strict": false,
+        "expected_strict": false,
+        "fixture": 1,
+        "pass": true
+      },
+      {
+        "actual_strict": true,
+        "expected_strict": true,
+        "fixture": 2,
+        "pass": true
+      }
+    ],
+    "scorer_id": "ifeval-official-e6890f8-v1",
+    "upstream_pinned_sha": "e6890f85757dd84e27ca6df2dd30651dafad28e0"
+  },
+  "math500": {
+    "fixtures": [
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 0,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 1,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 2,
+        "pass": true
+      },
+      {
+        "actual_correct": false,
+        "expected_correct": false,
+        "fixture": 3,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 4,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 5,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 6,
+        "pass": true
+      },
+      {
+        "actual_correct": false,
+        "expected_correct": false,
+        "fixture": 7,
+        "pass": true
+      }
+    ],
+    "scorer_id": "math500-boxed-minerva-v1"
+  },
+  "mmlupro": {
+    "fixtures": [
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 0,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 1,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 2,
+        "pass": true
+      },
+      {
+        "actual_correct": true,
+        "expected_correct": true,
+        "fixture": 3,
+        "pass": true
+      },
+      {
+        "actual_correct": false,
+        "expected_correct": false,
+        "fixture": 4,
+        "pass": true
+      },
+      {
+        "actual_correct": false,
+        "expected_correct": false,
+        "fixture": 5,
+        "pass": true
+      }
+    ],
+    "scorer_id": "mmlupro-letter-v1"
+  }
+}

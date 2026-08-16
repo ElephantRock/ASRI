@@ -1,0 +1,190 @@
+{
+  "flips": [
+    {
+      "item_id": "humanevalplus-HumanEval__104",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__106",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__11",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__123",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__13",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__14",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__147",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__15",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__152",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__162",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__18",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__2",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__23",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__28",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__29",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__30",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__34",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__35",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__37",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__42",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__45",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__58",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__6",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__75",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__79",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    },
+    {
+      "item_id": "humanevalplus-HumanEval__9",
+      "new_correct": true,
+      "new_failure": null,
+      "old_correct": false,
+      "old_failure": "base_fail"
+    }
+  ],
+  "n": 127,
+  "n_flips": 26,
+  "new_score": 0.7322834645669292,
+  "old_score": 0.5275590551181102
+}

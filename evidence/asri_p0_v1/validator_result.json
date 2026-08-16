@@ -1,0 +1,22 @@
+{
+  "all_pass": true,
+  "gate_details": {
+    "EVIDENCE_WRITE_PASS": [],
+    "HARNESS_PASS": [],
+    "MEMORY_MEASUREMENT_PASS": [],
+    "MODEL_FREEZE_PASS": [],
+    "REPRODUCIBILITY_PASS": [],
+    "RUNTIME_MEASUREMENT_PASS": [],
+    "SCORER_PASS": []
+  },
+  "gates": {
+    "EVIDENCE_WRITE_PASS": true,
+    "HARNESS_PASS": true,
+    "MEMORY_MEASUREMENT_PASS": true,
+    "MODEL_FREEZE_PASS": true,
+    "REPRODUCIBILITY_PASS": true,
+    "RUNTIME_MEASUREMENT_PASS": true,
+    "SCORER_PASS": true
+  },
+  "verdict": "BASELINE_READY"
+}
