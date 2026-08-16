@@ -4,24 +4,24 @@
       "by_category": {},
       "by_role": {
         "characterization": {
-          "correct": 60,
+          "correct": 81,
           "n": 111
         },
         "dev": {
-          "correct": 7,
+          "correct": 12,
           "n": 16
         }
       },
       "failure_counts": {
-        "base_fail": 53,
-        "plus_fail": 7
+        "base_fail": 26,
+        "plus_fail": 8
       },
       "mean_e2e_seconds": 17.3398240645637,
       "mean_output_tokens": 191.1811023622047,
       "median_output_tokens": 180,
       "n": 127,
-      "n_correct": 67,
-      "score": 0.5275590551181102
+      "n_correct": 93,
+      "score": 0.7322834645669292
     },
     "source": "evidence/asri_p0_v1/per_item/humanevalplus/quality.jsonl",
     "workload": "humanevalplus"

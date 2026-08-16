@@ -1,5 +1,14 @@
 {
   "all_pass": true,
+  "gate_details": {
+    "EVIDENCE_WRITE_PASS": [],
+    "HARNESS_PASS": [],
+    "MEMORY_MEASUREMENT_PASS": [],
+    "MODEL_FREEZE_PASS": [],
+    "REPRODUCIBILITY_PASS": [],
+    "RUNTIME_MEASUREMENT_PASS": [],
+    "SCORER_PASS": []
+  },
   "gates": {
     "EVIDENCE_WRITE_PASS": true,
     "HARNESS_PASS": true,

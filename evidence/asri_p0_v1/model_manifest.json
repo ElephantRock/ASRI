@@ -1,4 +1,13 @@
 {
+  "artifact_anchor": "immutable HF revision + control-file sha256 set",
+  "attention": {
+    "head_dim": 128,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "rope_theta": null
+  },
+  "chat_template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+  "context_cap": 4096,
   "control_file_sha256": {
     "config.json": "8ba006f74fecfaaeb392872a60f4a480e7ec9860153d2e1b769ec81f9a147f8a",
     "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
@@ -6,9 +15,17 @@
     "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
     "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101"
   },
+  "hidden_size": 2560,
+  "layer_count": 36,
+  "license": "Apache-2.0",
   "model_id": "Qwen/Qwen3-4B",
   "model_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "parameter_count": 4022468096,
+  "parameter_count_estimated": false,
   "resolved_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "thinking_mode": "disabled",
+  "torch_dtype": "torch.bfloat16",
+  "vocab_size": 151936,
   "weight_shards": [
     {
       "name": "model-00001-of-00003.safetensors",
