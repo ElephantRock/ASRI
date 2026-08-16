@@ -144,7 +144,7 @@ class TestBaselineGates:
         }
         runtime = {
             "workloads": {
-                w: {"trials": [{}] * baseline.LATENCY_TRIALS} for w in baseline.WORKLOADS
+                w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS
             }
         }
         repro = {"reproducibility_pass": True}
@@ -165,7 +165,7 @@ class TestBaselineGates:
             {w: {"n_items": 10} for w in baseline.WORKLOADS},
             {"a": {"fixtures": [{"pass": True}]}},
             self._quality(),
-            {"workloads": {w: {"trials": [{}] * 5} for w in baseline.WORKLOADS}},
+            {"workloads": {w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS}},
             {"reproducibility_pass": True},
         )
         assert gates["gates"]["MODEL_FREEZE_PASS"] is False
@@ -182,7 +182,7 @@ class TestBaselineGates:
             {w: {"n_items": 10} for w in baseline.WORKLOADS},
             {"a": {"fixtures": [{"pass": True}]}},
             self._quality(),
-            {"workloads": {w: {"trials": [{}] * 5} for w in baseline.WORKLOADS}},
+            {"workloads": {w: {"trials": [{}] * (baseline.LATENCY_ITEMS_PER_WORKLOAD * baseline.LATENCY_TRIALS)} for w in baseline.WORKLOADS}},
             {"reproducibility_pass": False},
         )
         assert gates["verdict"] == "BASELINE_REFINE"

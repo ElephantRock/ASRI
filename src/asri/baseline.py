@@ -323,7 +323,7 @@ def baseline_gates(
         isinstance(payload, dict) for payload in (quality, runtime, reproducibility)
     )
     runtime_pass = bool(runtime.get("workloads")) and all(
-        len(entry["trials"]) == LATENCY_TRIALS
+        len(entry["trials"]) == LATENCY_ITEMS_PER_WORKLOAD * LATENCY_TRIALS
         for entry in runtime["workloads"].values()
     )
     memory_pass = all(
