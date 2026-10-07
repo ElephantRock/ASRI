@@ -21,8 +21,8 @@
     "TORCH_HOME": false,
     "TRANSFORMERS_CACHE": false
   },
-  "gpu_driver": "610.47",
-  "gpu_power_draw": "26.51 W",
+  "gpu_driver": "616.64",
+  "gpu_power_draw": "27.68 W",
   "gpu_power_state": "P8",
   "huggingface_hub": "1.27.0",
   "logical_cpu_count": 12,

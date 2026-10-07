@@ -128,8 +128,8 @@ class TestBaselineGates:
     def _model_manifest() -> dict:
         return {
             "model_id": "Qwen/Qwen3-4B",
-            "model_revision": "r" * 40,
-            "resolved_revision": "r" * 40,
+            "model_revision": "a" * 40,
+            "resolved_revision": "a" * 40,
             "license": "Apache-2.0",
             "thinking_mode": "disabled",
             "context_cap": 4096,
@@ -142,7 +142,7 @@ class TestBaselineGates:
             "torch_dtype": "bfloat16",
             "chat_template_sha256": "a" * 64,
             "artifact_anchor": "immutable HF revision + control-file sha256 set",
-            "control_file_sha256": {"config.json": "abc"},
+            "control_file_sha256": {"config.json": "c" * 64},
             "weight_shards": [{"name": "a.safetensors", "size_bytes": 1}],
         }
 
@@ -226,7 +226,6 @@ class TestBaselineGates:
             "baseline_runtime.json", "baseline_memory.json", "reproducibility.json",
         ):
             (evidence_root / name).write_text("{}", encoding="utf-8")
-        (evidence_root / "closure.md").write_text("closure", encoding="utf-8")
         (evidence_root / "environment.json").write_text(
             json.dumps({"gpu_driver": "610.47", "attention_implementation": "sdpa"}),
             encoding="utf-8",
@@ -270,7 +269,7 @@ class TestBaselineGates:
 
     def test_model_freeze_fails_on_revision_mismatch(self, tmp_path: Path) -> None:
         context = self._context(tmp_path)
-        context["model_manifest"]["resolved_revision"] = "s" * 40
+        context["model_manifest"]["resolved_revision"] = "b" * 40
         gates = baseline.baseline_gates(context)
         assert gates["gates"]["MODEL_FREEZE_PASS"] is False
 
@@ -370,6 +369,40 @@ class TestBaselineGates:
         context["reproducibility"]["reproducibility_pass"] = False
         gates = baseline.baseline_gates(context)
         assert gates["verdict"] == "BASELINE_REFINE"
+
+
+    def test_fresh_root_without_closure_reaches_ready(self, tmp_path: Path) -> None:
+        # Regression: closure.md is rendered FROM the verdict, so a fresh
+        # evidence root must reach BASELINE_READY in one pass without it.
+        context = self._context(tmp_path)
+        assert not (context["evidence_root"] / "closure.md").exists()
+        gates = baseline.baseline_gates(context)
+        assert gates["all_pass"] is True, gates["gate_details"]
+        assert gates["verdict"] == "BASELINE_READY"
+
+    def test_model_freeze_fails_on_wrong_license_value(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["license"] = "MIT"
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
+
+    def test_model_freeze_fails_on_bool_parameter_count(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["parameter_count"] = True
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
+
+    def test_model_freeze_fails_on_non_hex_control_hash(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["control_file_sha256"] = {"config.json": "xyz"}
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
+
+    def test_model_freeze_fails_on_malformed_shard(self, tmp_path: Path) -> None:
+        context = self._context(tmp_path)
+        context["model_manifest"]["weight_shards"] = [{"name": "a.safetensors"}]
+        gates = baseline.baseline_gates(context)
+        assert gates["gates"]["MODEL_FREEZE_PASS"] is False
 
 
 class TestWindowsCompatPreflight:

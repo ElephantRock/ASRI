@@ -327,40 +327,76 @@ _FORBIDDEN_PATH_PATTERNS = (
 
 
 def _gate_model_freeze(model_manifest: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Validate §4 frozen metadata by identity, type, and value — not just
+    field presence. Accepts the phase0 frozen constants as ground truth."""
+    from .phase0 import MODEL_CONTEXT_CAP, MODEL_ID, MODEL_LICENSE
+
+    def positive_int(value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+    def nonempty_str(value: Any) -> bool:
+        return isinstance(value, str) and bool(value.strip())
+
+    def hex64(value: Any) -> bool:
+        return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
+
+    def hex_revision(value: Any) -> bool:
+        return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{40}", value))
+
     problems: list[str] = []
-    required_scalar = {
-        "license": str,
-        "parameter_count": int,
-        "layer_count": int,
-        "hidden_size": int,
-        "torch_dtype": str,
-        "chat_template_sha256": str,
-        "thinking_mode": str,
-        "context_cap": int,
-        "artifact_anchor": str,
-    }
-    for field, kind in required_scalar.items():
-        if field not in model_manifest:
-            problems.append(f"missing field: {field}")
-    if model_manifest.get("model_revision") != model_manifest.get("resolved_revision"):
+    m = model_manifest
+
+    if m.get("model_id") != MODEL_ID:
+        problems.append(f"model_id != {MODEL_ID}")
+    if m.get("license") != MODEL_LICENSE:
+        problems.append(f"license != {MODEL_LICENSE}")
+    if not hex_revision(m.get("model_revision")) or not hex_revision(m.get("resolved_revision")):
+        problems.append("model/resolved revision not 40-hex sha1-style ids")
+    if m.get("model_revision") != m.get("resolved_revision"):
         problems.append("resolved revision != pinned revision")
-    if model_manifest.get("parameter_count", 0) <= 0:
-        problems.append("parameter_count not positive")
-    if model_manifest.get("layer_count", 0) <= 0 or model_manifest.get("hidden_size", 0) <= 0:
-        problems.append("layer/hidden size missing")
-    attention = model_manifest.get("attention")
-    if not isinstance(attention, dict) or attention.get("num_attention_heads", 0) <= 0:
-        problems.append("attention configuration missing")
-    if not re.fullmatch(r"[0-9a-f]{64}", str(model_manifest.get("chat_template_sha256", ""))):
+    if not positive_int(m.get("parameter_count")):
+        problems.append("parameter_count not a positive int")
+    if "parameter_count_estimated" in m and not isinstance(m["parameter_count_estimated"], bool):
+        problems.append("parameter_count_estimated not a bool")
+    if not positive_int(m.get("layer_count")):
+        problems.append("layer_count not a positive int")
+    if not positive_int(m.get("hidden_size")):
+        problems.append("hidden_size not a positive int")
+    attention = m.get("attention")
+    if not isinstance(attention, dict):
+        problems.append("attention configuration not a dict")
+    else:
+        for field in ("num_attention_heads", "num_key_value_heads"):
+            if not positive_int(attention.get(field)):
+                problems.append(f"attention.{field} not a positive int")
+    dtype = m.get("torch_dtype")
+    if not nonempty_str(dtype) or "float" not in str(dtype).lower():
+        problems.append("torch_dtype not a float dtype string")
+    if not hex64(m.get("chat_template_sha256")):
         problems.append("chat_template_sha256 not a sha256")
-    if model_manifest.get("thinking_mode") != "disabled":
+    if not nonempty_str(m.get("thinking_mode")) or m.get("thinking_mode") != "disabled":
         problems.append("thinking mode not disabled")
-    if model_manifest.get("context_cap") != 4096:
-        problems.append("context cap != 4096")
-    if not model_manifest.get("control_file_sha256"):
+    if m.get("context_cap") != MODEL_CONTEXT_CAP or isinstance(m.get("context_cap"), bool):
+        problems.append(f"context cap != {MODEL_CONTEXT_CAP}")
+    if not nonempty_str(m.get("artifact_anchor")):
+        problems.append("artifact_anchor missing")
+    control_hashes = m.get("control_file_sha256")
+    if not isinstance(control_hashes, dict) or not control_hashes:
         problems.append("control file hashes missing")
-    if not model_manifest.get("weight_shards"):
+    elif not all(hex64(value) for value in control_hashes.values()):
+        problems.append("control file hash values not sha256")
+    shards = m.get("weight_shards")
+    if not isinstance(shards, list) or not shards:
         problems.append("weight shards missing")
+    else:
+        for shard in shards:
+            if (
+                not isinstance(shard, dict)
+                or not nonempty_str(shard.get("name"))
+                or not positive_int(shard.get("size_bytes"))
+            ):
+                problems.append("malformed weight shard entry")
+                break
     return (not problems), problems
 
 
@@ -507,8 +543,9 @@ def _gate_evidence_write(
             parsed[name] = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as error:
             problems.append(f"{name} does not parse: {error}")
-    if not (root / "closure.md").exists():
-        problems.append("missing artifact: closure.md")
+    # closure.md is deliberately NOT checked here: it is rendered FROM the
+    # verdict after the gates evaluate, so requiring it pre-verdict would be
+    # circular (a fresh run could never pass in one pass).
     for name, payload in parsed.items():
         rendered = json.dumps(payload)
         for pattern in _FORBIDDEN_PATH_PATTERNS:

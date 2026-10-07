@@ -120,6 +120,10 @@ def finalize_evidence(
         ),
         encoding="utf-8",
     )
+    # Post-write integrity: reported, never fed back into the verdict.
+    closure_text = (root / "closure.md").read_text(encoding="utf-8")
+    integrity_ok = bool(closure_text.strip()) and validator["verdict"] in closure_text
+    print(f"closure.md post-write integrity: {'ok' if integrity_ok else 'FAILED'}")
     return validator
 
 

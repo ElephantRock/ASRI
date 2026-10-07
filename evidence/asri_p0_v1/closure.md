@@ -5,7 +5,7 @@ Program: ASRI-P0-v1
 Machine verdict: BASELINE_READY (all seven §12 gates PASS; proposed closure
 pending project review)
 Run window: 2026-08-15 .. 2026-08-16 (local)
-Hardware: AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, 31.9 GB RAM, NVIDIA GeForce RTX 3080 Ti (driver 610.47, P8)
+Hardware: AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD, 31.9 GB RAM, NVIDIA GeForce RTX 3080 Ti (driver 616.64, P8)
 Software: Python 3.12.10, torch 2.13.0+cu130, transformers 5.15.0, attention: sdpa
 Substrate: Qwen/Qwen3-4B @ 1cfa9a7208912126459214e8b04321603b3df60c
            (bf16, thinking disabled, remote code disabled, no quantization)
